@@ -18,14 +18,14 @@ library(ggmice)
 library(mice)
 ```
 
+This is an excuse to try out the {compos} package, by David Firth and Fiona Sammut. The data used below was collated and published by [Democracy Club](https://candidates.democracyclub.org.uk/data/?election_id=parl.2024-07-04&field_group=results) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). I manually updated results for Edinburgh North and Leith since (on 9 July 2024) the turnout and total electorate values were mixed up (turnout percentage would have been over 100%, though was capped at 100%). This has now (10 July) been fixed in the original. The House of Commons Library is due to publish its own voting dataset [here](https://commonslibrary.parliament.uk/research-briefings/cbp-10009/) around 12 July.
 
-The data used below was collated and published by [Democracy Club](https://candidates.democracyclub.org.uk/data/?election_id=parl.2024-07-04&field_group=results) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). I manually updated results for Edinburgh North and Leith since (on 9 July 2024) the turnout and total electorate values were mixed up (turnout percentage would have been over 100%, though was capped at 100%). This has now (10 July) been fixed in the original. The House of Commons Library is due to publish its own voting dataset [here](https://commonslibrary.parliament.uk/research-briefings/cbp-10009/) around 12 July.
 
+## Setup the data
 
 ```{r}
 ge_dat <- read_csv("uk_general_election_2024.csv")
 ```
-
 
 Filter so we only have Labour, Tory, and Reform.
 
@@ -92,6 +92,7 @@ perc <- for_analy_counts |>
 perc
 ```
 
+## Have a look
 
 ```{r dpi=300}
 perc |>
@@ -111,11 +112,11 @@ perc |>
 
 
 
-## Fit the models using the original counts
+## Modelling
 
-Now, onto David Firth and Fiona Sammut's model.
+### Fit the models using the original counts
 
-These use the default generalized Wedderburn logit model.
+Now, onto the modelling. These use the generalized Wedderburn logit.
 
 ```{r}
 mod1_count <- colm(cbind(Con, Lab, Ref) ~ turnout_percentage, ref = 1, data = for_analy_counts)
@@ -140,7 +141,7 @@ I need to RTFM to work out how to interpret the coefficients; however, the estim
 
 
 
-## Try again with percentages
+### Try again with percentages
 
 If I've understood correctly, then using the percentages as outcomes, rather than counts, should give the same results:
 
@@ -182,3 +183,67 @@ mod3_perc  |> short_sum()
 And indeed they do.
 
 
+## Multiple imputation -- danger danger, going beyond the function manual...
+
+Earlier we just zapped all missing data. Let's bring back missingness in the turnouts and only drop rows where one or more of the three parties didn't have a candidate.
+
+
+```{r}
+names(simp_dat)
+```
+
+
+```{r}
+counts_with_miss <- simp_dat |>
+  drop_na(Ref:Con)
+```
+
+Impute 50 times with default settings.
+
+```{r}
+set.seed(1337)
+imp <- mice(counts_with_miss, m = 50)
+```
+
+
+Fit (one of) the model(s) to each imputed dataset.
+
+```{r}
+mods <- with(imp, colm(cbind(Con, Lab, Ref) ~ turnout_percentage, ref = 1))
+```
+
+
+```{r}
+get_params <- function(mod, comp = 1, pred) {
+  the_coefs <- summary(mod)$Coefficients[[comp]]
+  res <- the_coefs[pred, ]
+  names(res) <- c("B", "SE")
+  res
+}
+```
+
+
+```{r}
+get_params(mods$analyses[[1]], 1, "turnout_percentage")
+```
+
+
+
+```{r}
+the_coefs <- map(mods$analyses, \(m) get_params(m, 1, "turnout_percentage")) |> bind_rows()
+the_coefs$N <- nrow(counts_with_miss)
+the_coefs
+```
+
+```{r}
+pooled <- pool.scalar(the_coefs$B, the_coefs$SE^2, the_coefs$N)
+res <- list(B = pooled$qbar, SE = sqrt(pooled$ubar))
+res$t <- res$B / res$SE
+res$df <- pooled$df[1]
+res$p <- as.vector(pt(abs(res$t), df = res$df, lower.tail = FALSE) * 2)
+res
+```
+
+```{r}
+mod1_count |> short_sum()
+```
