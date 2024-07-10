@@ -1,6 +1,7 @@
 ---
 title: "Did turnout predict the composition of Labour, Tory, and Reform votes in the 2024 UK general election?"
 author: "Andi Fugard (@andi@sciences.social)"
+date: 10 July 2024
 output:
   html_document:
     df_print: paged
@@ -18,7 +19,7 @@ library(compos)
 
 
 
-The data used below was collated and published by [Democracy Club](https://candidates.democracyclub.org.uk/data/?election_id=parl.2024-07-04&field_group=results) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). I manually updated results for Edinburgh North and Leith since (on 9 July 2024) the turnout and total electorate values were mixed up (turnout percentage would have been over 100% though was capped at 100%).
+The data used below was collated and published by [Democracy Club](https://candidates.democracyclub.org.uk/data/?election_id=parl.2024-07-04&field_group=results) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). I manually updated results for Edinburgh North and Leith since (on 9 July 2024) the turnout and total electorate values were mixed up (turnout percentage would have been over 100% though was capped at 100%). Commons Library is due to publish its dataset on voting [here](https://commonslibrary.parliament.uk/research-briefings/cbp-10009/) around 12 July.
 
 
 ```{r}
