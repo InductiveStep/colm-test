@@ -1,5 +1,5 @@
 ---
-title: "Does turnout predict the composition of Labour, Tory, and Reform votes?"
+title: "Did turnout predict the composition of Labour, Tory, and Reform votes in the 2024 UK general election?"
 author: "Andi Fugard (@andi@sciences.social)"
 output:
   html_document:
@@ -77,7 +77,7 @@ Zap all the rows with any missing data (e.g., Reform didn't stand a candidate or
 for_anal <- na.omit(simp_dat)
 ```
 
-Create another tibble with percentages, conditional on voting for one of these three parties.
+Create another data frame with percentages, conditional on voting for one of these three parties.
 
 ```{r}
 perc <- for_anal |>
@@ -87,13 +87,6 @@ perc <- for_anal |>
   group_by(post_label) |>
   mutate(Perc = 100 * Votes / sum(Votes))
 perc
-```
-
-
-
-```{r}
-ge_dat |>
-  dplyr::filter(turnout_percentage == 100)
 ```
 
 
