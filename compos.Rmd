@@ -1,0 +1,129 @@
+---
+title: "Does turnout predict the composition of Labour, Tory, and Reform votes?"
+author: "Andi Fugard (@andi@sciences.social)"
+output:
+  html_document:
+    df_print: paged
+  html_notebook:
+    code_folding: none
+---
+
+```{r}
+#devtools::install_github("DavidFirth/compos")
+library(conflicted)
+library(tidyverse)
+library(compos)
+```
+
+
+
+
+The data used below was collated by [Democracy Club](https://candidates.democracyclub.org.uk/data/?election_id=parl.2024-07-04&field_group=results) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). I manually updated results for Edinburgh North and Leith since (on 9 July 2024) the turnout and total electorate values were mixed up (turnout percentage would have been over 100% though was capped at 100%).
+
+
+```{r}
+ge_dat <- read_csv("uk_general_election_2024.csv")
+```
+
+```{r}
+names(ge_dat)
+```
+
+
+Filter so we only have Labour, Tory, and Reform.
+
+```{r}
+parties <- c("Labour and Co-operative Party",
+             "Labour Party",
+             "Conservative and Unionist Party",
+             "Reform UK")
+```
+
+
+And pivot wider, with all the data we want:
+
+```{r}
+simp_dat <- ge_dat |>
+  dplyr::filter(party_name %in% parties) |>
+  mutate(
+    part = case_when(
+      party_name == "Labour and Co-operative Party" ~ "Lab",
+      party_name == "Labour Party" ~ "Lab",
+      party_name == "Conservative and Unionist Party" ~ "Con",
+      party_name == "Reform UK" ~ "Ref",     
+      .default = NA_character_
+    )
+  ) |>
+  select(post_label, part, votes_cast, turnout_percentage) |>
+  pivot_wider(names_from = "part", values_from = "votes_cast")
+simp_dat
+```
+
+
+```{r}
+simp_dat |> summary()
+```
+
+What percentage of missing data on turnout?
+
+```{r}
+(simp_dat$turnout_percentage |> is.na() |> mean() * 100) |> round(0)
+```
+
+
+Zap all the rows with any missing data (e.g., Reform didn't stand a candidate or no turnout data is available)
+
+```{r}
+for_anal <- na.omit(simp_dat)
+```
+
+Create another tibble with percentages, conditional on voting for one of these three parties.
+
+```{r}
+perc <- for_anal |>
+  pivot_longer(names_to = "Party",
+               values_to = "Votes",
+               cols = Ref:Con) |>
+  group_by(post_label) |>
+  mutate(Perc = 100 * Votes / sum(Votes))
+perc
+```
+
+
+
+```{r}
+ge_dat |>
+  dplyr::filter(turnout_percentage == 100)
+```
+
+
+```{r dpi=300}
+perc |>
+  ggplot(aes(turnout_percentage, Perc, colour = Party)) +
+  geom_point(size = .7) +
+  geom_smooth(se = FALSE, method = "loess", formula = y ~ x) +
+  labs(x = "Turnout (%)", y = "Votes (%)", title = "UK general election 2024", caption = "Percentage votes are conditional on voting Tory, Labour, or Reform") +
+  scale_color_manual(values=c("#0087dc", "#d50000", "#12b6cf"))
+```
+
+
+
+
+Now... I need to RTFM and/or do some arithmetic to work out how to interpret these coefficients; however, the estimate/SE are >> 2 for the obvious patterns in the pic above.
+
+```{r}
+mod1 <- colm(cbind(Con, Lab, Ref) ~ turnout_percentage, ref = 1, data = for_anal)
+summary(mod1)
+```
+
+
+```{r}
+mod2 <- colm(cbind(Con, Lab, Ref) ~ turnout_percentage, ref = 2, data = for_anal)
+summary(mod2)
+```
+
+
+```{r}
+mod3 <- colm(cbind(Con, Lab, Ref) ~ turnout_percentage, ref = 3, data = for_anal)
+summary(mod3)
+```
