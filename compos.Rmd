@@ -116,7 +116,7 @@ perc |>
 
 ### Fit the models using the original counts
 
-Now, onto the modelling. These use the generalized Wedderburn logit.
+Now, onto the modelling. These use the generalized Wedderburn logit model.
 
 ```{r}
 mod1_count <- colm(cbind(Con, Lab, Ref) ~ turnout_percentage, ref = 1, data = for_analy_counts)
@@ -197,6 +197,12 @@ names(simp_dat)
 counts_with_miss <- simp_dat |>
   drop_na(Ref:Con)
 ```
+
+
+```{r}
+plot_pattern(counts_with_miss, rotate = TRUE)
+```
+
 
 Impute 50 times with default settings.
 
