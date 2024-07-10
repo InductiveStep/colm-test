@@ -18,7 +18,7 @@ library(compos)
 
 
 
-The data used below was collated by [Democracy Club](https://candidates.democracyclub.org.uk/data/?election_id=parl.2024-07-04&field_group=results) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). I manually updated results for Edinburgh North and Leith since (on 9 July 2024) the turnout and total electorate values were mixed up (turnout percentage would have been over 100% though was capped at 100%).
+The data used below was collated and published by [Democracy Club](https://candidates.democracyclub.org.uk/data/?election_id=parl.2024-07-04&field_group=results) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). I manually updated results for Edinburgh North and Leith since (on 9 July 2024) the turnout and total electorate values were mixed up (turnout percentage would have been over 100% though was capped at 100%).
 
 
 ```{r}
