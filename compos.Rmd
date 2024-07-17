@@ -10,6 +10,13 @@ output:
   word_document: default
 ---
 
+
+This is an excuse to try out the {compos} package, by David Firth and Fiona Sammut. The data used below was collated and published by [Democracy Club](https://candidates.democracyclub.org.uk/data/?election_id=parl.2024-07-04&field_group=results) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
+The House of Commons Library is due to publish its own voting dataset [here](https://commonslibrary.parliament.uk/research-briefings/cbp-10009/) some time week of 15 July.
+
+Load up some packages ({compos} isn't on CRAN yet):
+
 ```{r}
 #devtools::install_github("DavidFirth/compos")
 library(conflicted)
@@ -19,13 +26,6 @@ library(ggmice)
 library(mice)
 library(table1)
 ```
-
-This is an excuse to try out the {compos} package, by David Firth and Fiona Sammut. The data used below was collated and published by [Democracy Club](https://candidates.democracyclub.org.uk/data/?election_id=parl.2024-07-04&field_group=results) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). I manually updated results for Edinburgh North and Leith since (on 9 July 2024) the turnout and total electorate values were mixed up (turnout percentage would have been over 100%, though was capped at 100%). This has now (10 July) been fixed in the original.
-
-Update: new dataset as of 17 July, which has more missingness on turnout.
-
-The House of Commons Library is due to publish its own voting dataset [here](https://commonslibrary.parliament.uk/research-briefings/cbp-10009/) some time week of 15 July.
-
 
 
 ## Setup the data
@@ -77,20 +77,19 @@ plot_pattern(simp_dat, rotate = TRUE)
 ```
 
 
-Where did Reform not stand?
-
 ```{r}
 names(simp_dat)
 ```
-
 
 Zap all the rows with any missing data (e.g., Reform didn't stand a candidate or no turnout data is available).
 
 ```{r}
 for_analy_counts <- na.omit(simp_dat)
+table1( ~ ., data = for_analy_counts |> dplyr::select(-post_label))
 ```
 
-Create another data frame with percentages, conditional on voting for one of these three parties.
+
+Create another dataframe with percentages, conditional on voting for one of these three parties.
 
 ```{r}
 perc <- for_analy_counts |>
@@ -396,7 +395,7 @@ reform_ass |>
 ```
 
 
-```{r}
+```{r dpi=300}
 reform_ass |>
   ggplot(aes(
     colour = factor(reform_stood, labels = c("No", "Yes")),
