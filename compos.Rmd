@@ -1,12 +1,14 @@
 ---
-title: "Did turnout predict the composition of Labour, Tory, and Reform votes in the 2024 UK general election?"
+title: Did turnout predict the composition of Labour, Tory, and Reform votes in the
+  2024 UK general election?
 author: "Andi Fugard (@andi@sciences.social)"
-date: 10 July 2024
+date: "17 July 2024"
 output:
   html_document:
     df_print: paged
   html_notebook:
     code_folding: none
+  word_document: default
 ---
 
 ```{r}
@@ -18,13 +20,19 @@ library(ggmice)
 library(mice)
 ```
 
-This is an excuse to try out the {compos} package, by David Firth and Fiona Sammut. The data used below was collated and published by [Democracy Club](https://candidates.democracyclub.org.uk/data/?election_id=parl.2024-07-04&field_group=results) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). I manually updated results for Edinburgh North and Leith since (on 9 July 2024) the turnout and total electorate values were mixed up (turnout percentage would have been over 100%, though was capped at 100%). This has now (10 July) been fixed in the original. The House of Commons Library is due to publish its own voting dataset [here](https://commonslibrary.parliament.uk/research-briefings/cbp-10009/) around 12 July.
+This is an excuse to try out the {compos} package, by David Firth and Fiona Sammut. The data used below was collated and published by [Democracy Club](https://candidates.democracyclub.org.uk/data/?election_id=parl.2024-07-04&field_group=results) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). I manually updated results for Edinburgh North and Leith since (on 9 July 2024) the turnout and total electorate values were mixed up (turnout percentage would have been over 100%, though was capped at 100%). This has now (10 July) been fixed in the original.
+
+Update: new dataset as of 17 July, which has more missingness on turnout.
+
+The House of Commons Library is due to publish its own voting dataset [here](https://commonslibrary.parliament.uk/research-briefings/cbp-10009/) some time week of 15 July.
+
 
 
 ## Setup the data
 
 ```{r}
-ge_dat <- read_csv("uk_general_election_2024.csv")
+#ge_dat <- read_csv("uk_general_election_2024.csv")
+ge_dat <- read_csv("uk_general_election_2024_updated_2024-07-17.csv")
 ```
 
 Filter so we only have Labour, Tory, and Reform.
@@ -95,12 +103,9 @@ perc
 ## Have a look
 
 ```{r dpi=300}
-perc |>
+plot_votes <- perc |>
   ggplot(aes(turnout_percentage, Perc, colour = Party)) +
   geom_point(size = .7) +
-  geom_smooth(se = FALSE,
-              method = "loess",
-              formula = y ~ x) +
   labs(
     x = "Turnout (%)",
     y = "Votes (%)",
@@ -108,6 +113,10 @@ perc |>
     caption = "Percentage votes are conditional on voting Tory, Labour, or Reform"
   ) +
   scale_color_manual(values = c("#0087dc", "#d50000", "#12b6cf"))
+plot_votes +
+  geom_smooth(se = FALSE,
+              method = "loess",
+              formula = y ~ x)
 ```
 
 
@@ -137,13 +146,82 @@ mod2_count |> short_sum()
 mod3_count |> short_sum()
 ```
 
-I need to RTFM to work out how to interpret the coefficients; however, the estimates/SE for turnout are over 14 for the comparisons of Labour versus Conservative and Reform versus conservative. They are around 4 for Labour versus Reform.
+The estimates/SE for turnout are over 14 for the comparisons of Labour versus Conservative and Reform versus conservative. They are around 4 for Labour versus Reform. So, all "statistically significant".
+
+Now the coefficients. Choose the first model:
 
 
+```{r}
+bs <- mod1_count |> coef()
+bs
+```
+
+These are as easy to interpret as logistic regression coefficients ;-) One trick is to exp them to get odds ratios.
+
+```{r}
+bs |> exp() |> round(2)
+```
+
+The intercepts give the odds of voting each party rather than Conservative when turnout is zero, which probably isn't useful... Each percentage point increase in turnout reduces the odds of voting Labour by 8% compared to Conservative.
+
+It's easier to plot them:
+
+
+```{r}
+lab_vs_con_pred <- function(t)
+  exp(bs["(Intercept)", "Lab"] + bs["turnout_percentage", "Lab"] * t)
+ref_vs_con_pred <- function(t)
+  exp(bs["(Intercept)", "Ref"] + bs["turnout_percentage", "Ref"] * t)
+con_vs_con_pred <- function(t)
+  exp(bs["(Intercept)", "Con"] + bs["turnout_percentage", "Con"] * t)
+
+lab_pred <- function(turnout)
+  100 * lab_vs_con_pred(turnout) /
+  (lab_vs_con_pred(turnout) + con_vs_con_pred(turnout) + ref_vs_con_pred(turnout))
+con_pred <- function(turnout)
+  100 * con_vs_con_pred(turnout) /
+  (lab_vs_con_pred(turnout) + con_vs_con_pred(turnout) + ref_vs_con_pred(turnout))
+ref_pred <- function(turnout)
+  100 * ref_vs_con_pred(turnout) /
+  (lab_vs_con_pred(turnout) + con_vs_con_pred(turnout) + ref_vs_con_pred(turnout))
+```
+
+Note the Conservative predictions, since it is the base category:
+
+```{r}
+con_vs_con_pred(seq(0, 100, 10))
+```
+
+```{r dpi=300}
+plot_votes +
+  geom_function(
+    fun = lab_pred,
+    colour = "#d50000",
+    size = 1,
+    linetype = "dashed"
+  ) +
+  geom_function(
+    fun = con_pred,
+    colour = "#0087dc",
+    size = 1,
+    linetype = "dashed"
+  ) +
+  geom_function(
+    fun = ref_pred,
+    colour = "#12b6cf",
+    size = 1,
+    linetype = "dashed"
+  ) +
+  labs(title = "UK general election 2024 – colm model predictions",
+       caption = "Percentage votes are conditional on voting Tory, Labour, or Reform.\nDashed curves are colm model predictions; solid curves are loess.") +
+  geom_smooth(se = FALSE,
+              method = "loess",
+              formula = y ~ x)
+```
 
 ### Try again with percentages
 
-If I've understood correctly, then using the percentages as outcomes, rather than counts, should give the same results:
+If I've understood correctly, then using the percentages as outcomes, rather than counts, should give the same model coefficients:
 
 ```{r}
 for_analy_percs <- perc |>
@@ -154,9 +232,15 @@ for_analy_percs
 ```
 
 ```{r}
-mod1_perc <- colm(cbind(Con, Lab, Ref) ~ turnout_percentage, ref = 1, data = for_analy_percs)
-mod2_perc <- colm(cbind(Con, Lab, Ref) ~ turnout_percentage, ref = 2, data = for_analy_percs)
-mod3_perc <- colm(cbind(Con, Lab, Ref) ~ turnout_percentage, ref = 3, data = for_analy_percs)
+mod1_perc <- colm(cbind(Con, Lab, Ref) ~ turnout_percentage,
+                  ref = 1,
+                  data = for_analy_percs)
+mod2_perc <- colm(cbind(Con, Lab, Ref) ~ turnout_percentage,
+                  ref = 2,
+                  data = for_analy_percs)
+mod3_perc <- colm(cbind(Con, Lab, Ref) ~ turnout_percentage,
+                  ref = 3,
+                  data = for_analy_percs)
 ```
 
 Reference level Con:
@@ -181,6 +265,16 @@ mod3_perc  |> short_sum()
 ```
 
 And indeed they do.
+
+The fitted values are different, though -- they are on the original scale:
+
+```{r}
+mod1_perc$fitted.values |> head()
+```
+
+```{r}
+mod1_count$fitted.values |> head()
+```
 
 
 ## Multiple imputation -- danger danger, going beyond the function manual...
@@ -207,12 +301,12 @@ plot_pattern(counts_with_miss, rotate = TRUE)
 Impute 50 times with default settings.
 
 ```{r}
-set.seed(1337)
-imp <- mice(counts_with_miss, m = 50)
+set.seed(412121)
+imp <- mice(counts_with_miss, m = 50, printFlag = FALSE)
 ```
 
 
-Fit (one of) the model(s) to each imputed dataset.
+Fit one of the models to each imputed dataset.
 
 ```{r}
 mods <- with(imp, colm(cbind(Con, Lab, Ref) ~ turnout_percentage, ref = 1))
@@ -228,12 +322,11 @@ get_params <- function(mod, comp = 1, pred) {
 }
 ```
 
+Quick check:
 
 ```{r}
 get_params(mods$analyses[[1]], 1, "turnout_percentage")
 ```
-
-
 
 ```{r}
 the_coefs <- map(mods$analyses, \(m) get_params(m, 1, "turnout_percentage")) |> bind_rows()
@@ -241,15 +334,34 @@ the_coefs$N <- nrow(counts_with_miss)
 the_coefs
 ```
 
+
+The estimate:
+
 ```{r}
 pooled <- pool.scalar(the_coefs$B, the_coefs$SE^2, the_coefs$N)
 res <- list(B = pooled$qbar, SE = sqrt(pooled$ubar))
 res$t <- res$B / res$SE
 res$df <- pooled$df[1]
 res$p <- as.vector(pt(abs(res$t), df = res$df, lower.tail = FALSE) * 2)
-res
+res |> as_tibble()
 ```
+
+## Comparison with multinomial regression
+
+```{r}
+library(nnet)
+```
+
+
+```{r}
+mn_mod1 <- multinom(cbind(Con, Lab, Ref) ~ turnout_percentage, data = for_analy_counts)
+mn_mod1 |> summary()
+```
+
+Compare with colm:
 
 ```{r}
 mod1_count |> short_sum()
 ```
+
+The estimates are similar. The multinomal regression SEs are much smaller, presumably because it can take advantage of the counts.
