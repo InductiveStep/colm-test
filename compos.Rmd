@@ -17,6 +17,7 @@ library(tidyverse)
 library(compos)
 library(ggmice)
 library(mice)
+library(table1)
 ```
 
 This is an excuse to try out the {compos} package, by David Firth and Fiona Sammut. The data used below was collated and published by [Democracy Club](https://candidates.democracyclub.org.uk/data/?election_id=parl.2024-07-04&field_group=results) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). I manually updated results for Edinburgh North and Leith since (on 9 July 2024) the turnout and total electorate values were mixed up (turnout percentage would have been over 100%, though was capped at 100%). This has now (10 July) been fixed in the original.
@@ -65,19 +66,21 @@ simp_dat
 
 
 ```{r}
-simp_dat |> summary()
+table1(~., data=simp_dat |> dplyr::select(-post_label))
 ```
+
+
+
 
 ```{r}
 plot_pattern(simp_dat, rotate = TRUE)
 ```
 
 
-
-What percentage of missing data on turnout?
+Where did Reform not stand?
 
 ```{r}
-(simp_dat$turnout_percentage |> is.na() |> mean() * 100) |> round(0)
+names(simp_dat)
 ```
 
 
@@ -353,7 +356,8 @@ library(nnet)
 
 
 ```{r}
-mn_mod1 <- multinom(cbind(Con, Lab, Ref) ~ turnout_percentage, data = for_analy_counts)
+mn_mod1 <- multinom(cbind(Con, Lab, Ref) ~ turnout_percentage,
+                    Hess = TRUE, data = for_analy_counts)
 mn_mod1 |> summary()
 ```
 
@@ -364,3 +368,52 @@ mod1_count |> short_sum()
 ```
 
 The estimates are similar. The multinomal regression SEs are much smaller, presumably because it can take advantage of the counts.
+
+
+
+## What effect does having a Reform candidate have on the split between Tory/Labour?
+
+
+They stood most places, so this is going to be tricky...
+
+```{r}
+reform_ass <- simp_dat |>
+  drop_na(Lab, Con, turnout_percentage) |>
+  mutate(reform_stood = 1 - is.na(Ref),
+         Lab_perc = 100 * Lab / (Lab + Con))
+```
+
+
+```{r}
+table1(~ Lab + Con + Ref + reform_stood + turnout_percentage, data = reform_ass)
+```
+
+```{r paged.print=FALSE}
+reform_ass |>
+  dplyr::filter(reform_stood == 0) |>
+  arrange(-Lab / (Lab + Con)) |>
+  select(-c(Ref, reform_stood))
+```
+
+
+```{r}
+reform_ass |>
+  ggplot(aes(
+    colour = factor(reform_stood, labels = c("No", "Yes")),
+    x = turnout_percentage,
+    y = Lab_perc
+  )) +
+  geom_point() +
+  geom_smooth(method = "loess",
+              formula = "y ~ x",
+              se = TRUE) +
+  labs(x = "Turnout (%)",
+       y = "Percentage voting Lab (versus Con)",
+       colour = "Reform stood",
+       title = "Percentage voting Lab (vs. Con)") +
+  ylim(0, NA)
+```
+
+Not enough points to have faith in this!
+
+
