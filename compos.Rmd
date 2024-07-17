@@ -1,7 +1,6 @@
 ---
-title: Did turnout predict the composition of Labour, Tory, and Reform votes in the
-  2024 UK general election?
-author: "Andi Fugard (@andi@sciences.social)"
+title: Was turnout associated with the composition of Labour, Tory, and Reform votes in the 2024 UK general election?
+author: "Andi Fugard (Mastodon: @andi@sciences.social)"
 date: "17 July 2024"
 output:
   html_document:
