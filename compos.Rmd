@@ -1,7 +1,7 @@
 ---
 title: Was turnout associated with the composition of Labour, Tory, and Reform votes in the 2024 UK general election?
 author: "Andi Fugard (Mastodon: @andi@sciences.social)"
-date: "17 July 2024"
+date: "19 July 2024"
 output:
   html_document:
     df_print: paged
@@ -11,9 +11,9 @@ output:
 ---
 
 
-This is an excuse to try out the {compos} package, by David Firth and Fiona Sammut. The data used below was collated and published by [Democracy Club](https://candidates.democracyclub.org.uk/data/?election_id=parl.2024-07-04&field_group=results) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+This is an excuse to try out the {compos} package, by David Firth and Fiona Sammut.
 
-The House of Commons Library is due to publish its own voting dataset [here](https://commonslibrary.parliament.uk/research-briefings/cbp-10009/) some time week of 15 July.
+The original analysis used data collated and published by [Democracy Club](https://candidates.democracyclub.org.uk/data/?election_id=parl.2024-07-04&field_group=results). This analysis uses [data](https://commonslibrary.parliament.uk/research-briefings/cbp-10009/) from the House of Commons Library, published 18 July.
 
 Load up some packages ({compos} isn't on CRAN yet):
 
@@ -30,43 +30,46 @@ library(table1)
 
 ## Setup the data
 
+Candidate-level data:
+
 ```{r}
-#ge_dat <- read_csv("uk_general_election_2024.csv")
-ge_dat <- read_csv("uk_general_election_2024_updated_2024-07-17.csv")
+ge_dat <- read_csv("https://researchbriefings.files.parliament.uk/documents/CBP-10009/HoC-GE2024-results-by-candidate.csv")
 ```
 
-Filter so we only have Labour, Tory, and Reform.
+Constituency-level data, used for the turnout figures:
 
 ```{r}
-parties <- c("Labour and Co-operative Party",
-             "Labour Party",
-             "Conservative and Unionist Party",
-             "Reform UK")
+ge_turnout <- read_csv("https://researchbriefings.files.parliament.uk/documents/CBP-10009/HoC-GE2024-results-by-constituency.csv") |>
+  mutate(turnout_percentage = 100*`Valid votes`/Electorate) |>
+  select(`Constituency name`, turnout_percentage) |>
+  rename(constituency = `Constituency name`)
+ge_turnout
 ```
 
-
-And pivot wider, with all the data we want:
+Filter so we only have Labour, Tory, and Reform, join on the turnout, and pivot wider with all the data we want (also fix one typo in the data, which I've notified Commons Library about):
 
 ```{r}
+parties <- c("Lab", "Con", "RUK")
+
 simp_dat <- ge_dat |>
-  dplyr::filter(party_name %in% parties) |>
+  dplyr::filter(`Party abbreviation` %in% parties) |>
+  select(`Constituency name`, `Party abbreviation`, Votes) |>
   mutate(
-    part = case_when(
-      party_name == "Labour and Co-operative Party" ~ "Lab",
-      party_name == "Labour Party" ~ "Lab",
-      party_name == "Conservative and Unionist Party" ~ "Con",
-      party_name == "Reform UK" ~ "Ref",     
-      .default = NA_character_
+    `Constituency name` = ifelse(
+      `Constituency name` == "YeoYeovil",
+      "Yeovil",
+      `Constituency name`
     )
   ) |>
-  select(post_label, part, votes_cast, turnout_percentage) |>
-  pivot_wider(names_from = "part", values_from = "votes_cast")
+  pivot_wider(names_from = `Party abbreviation`, values_from = "Votes") |>
+  rename(constituency = `Constituency name`) |>
+  left_join(ge_turnout)
 simp_dat
 ```
 
 
 ```{r}
-table1(~., data=simp_dat |> dplyr::select(-post_label))
+table1( ~ ., data = simp_dat |> dplyr::select(-constituency))
 ```
 
 
@@ -77,15 +80,17 @@ plot_pattern(simp_dat, rotate = TRUE)
 ```
 
 
+
+
 ```{r}
 names(simp_dat)
 ```
 
-Zap all the rows with any missing data (e.g., Reform didn't stand a candidate or no turnout data is available).
+Zap all the rows with any missing data (e.g., because Reform didn't stand a candidate).
 
 ```{r}
 for_analy_counts <- na.omit(simp_dat)
-table1( ~ ., data = for_analy_counts |> dplyr::select(-post_label))
+table1( ~ ., data = for_analy_counts |> dplyr::select(-constituency))
 ```
 
 
@@ -95,8 +100,8 @@ Create another dataframe with percentages, conditional on voting for one of thes
 perc <- for_analy_counts |>
   pivot_longer(names_to = "Party",
                values_to = "Votes",
-               cols = Ref:Con) |>
-  group_by(post_label) |>
+               cols = Con:Lab) |>
+  group_by(constituency) |>
   mutate(Perc = 100 * Votes / sum(Votes))
 perc
 ```
@@ -129,9 +134,9 @@ plot_votes +
 Now, onto the modelling. These use the generalized Wedderburn logit model.
 
 ```{r}
-mod1_count <- colm(cbind(Con, Lab, Ref) ~ turnout_percentage, ref = 1, data = for_analy_counts)
-mod2_count <- colm(cbind(Con, Lab, Ref) ~ turnout_percentage, ref = 2, data = for_analy_counts)
-mod3_count <- colm(cbind(Con, Lab, Ref) ~ turnout_percentage, ref = 3, data = for_analy_counts)
+mod1_count <- colm(cbind(Con, Lab, RUK) ~ turnout_percentage, ref = 1, data = for_analy_counts)
+mod2_count <- colm(cbind(Con, Lab, RUK) ~ turnout_percentage, ref = 2, data = for_analy_counts)
+mod3_count <- colm(cbind(Con, Lab, RUK) ~ turnout_percentage, ref = 3, data = for_analy_counts)
 ```
 
 
@@ -147,7 +152,7 @@ mod2_count |> short_sum()
 mod3_count |> short_sum()
 ```
 
-The estimates/SE for turnout are over 14 for the comparisons of Labour versus Conservative and Reform versus conservative. They are around 4 for Labour versus Reform. So, all "statistically significant".
+The estimates/SE for turnout are around 20 for the comparisons of Labour versus Conservative and Reform versus conservative. They are around 6 for Labour versus Reform. So, all "statistically significant".
 
 Now the coefficients. Choose the first model:
 
@@ -172,7 +177,7 @@ It's easier to plot them:
 lab_vs_con_pred <- function(t)
   exp(bs["(Intercept)", "Lab"] + bs["turnout_percentage", "Lab"] * t)
 ref_vs_con_pred <- function(t)
-  exp(bs["(Intercept)", "Ref"] + bs["turnout_percentage", "Ref"] * t)
+  exp(bs["(Intercept)", "RUK"] + bs["turnout_percentage", "RUK"] * t)
 con_vs_con_pred <- function(t)
   exp(bs["(Intercept)", "Con"] + bs["turnout_percentage", "Con"] * t)
 
@@ -187,30 +192,32 @@ ref_pred <- function(turnout)
   (lab_vs_con_pred(turnout) + con_vs_con_pred(turnout) + ref_vs_con_pred(turnout))
 ```
 
-Note the Conservative predictions, since it is the base category:
+Note the Conservative predictions, since it is the base category with intercept and slope of zero:
 
 ```{r}
 con_vs_con_pred(seq(0, 100, 10))
 ```
+
+(I wanted to follow the recipe rather than just add a constant.)
 
 ```{r dpi=300}
 plot_votes +
   geom_function(
     fun = lab_pred,
     colour = "#d50000",
-    size = 1,
+    linewidth = 1,
     linetype = "dashed"
   ) +
   geom_function(
     fun = con_pred,
     colour = "#0087dc",
-    size = 1,
+    linewidth = 1,
     linetype = "dashed"
   ) +
   geom_function(
     fun = ref_pred,
     colour = "#12b6cf",
-    size = 1,
+    linewidth = 1,
     linetype = "dashed"
   ) +
   labs(title = "UK general election 2024 – colm model predictions",
@@ -220,9 +227,12 @@ plot_votes +
               formula = y ~ x)
 ```
 
+The loess curve looks more sigmoid-shaped than the colm fit.
+
+
 ### Try again with percentages
 
-If I've understood correctly, then using the percentages as outcomes, rather than counts, should give the same model coefficients:
+If I've understood the model correctly, then using the percentages as outcomes, rather than counts, should give the same model coefficients and standard errors:
 
 ```{r}
 for_analy_percs <- perc |>
@@ -233,13 +243,13 @@ for_analy_percs
 ```
 
 ```{r}
-mod1_perc <- colm(cbind(Con, Lab, Ref) ~ turnout_percentage,
+mod1_perc <- colm(cbind(Con, Lab, RUK) ~ turnout_percentage,
                   ref = 1,
                   data = for_analy_percs)
-mod2_perc <- colm(cbind(Con, Lab, Ref) ~ turnout_percentage,
+mod2_perc <- colm(cbind(Con, Lab, RUK) ~ turnout_percentage,
                   ref = 2,
                   data = for_analy_percs)
-mod3_perc <- colm(cbind(Con, Lab, Ref) ~ turnout_percentage,
+mod3_perc <- colm(cbind(Con, Lab, RUK) ~ turnout_percentage,
                   ref = 3,
                   data = for_analy_percs)
 ```
@@ -278,74 +288,6 @@ mod1_count$fitted.values |> head()
 ```
 
 
-## Multiple imputation -- danger danger, going beyond the function manual...
-
-Earlier we just zapped all missing data. Let's bring back missingness in the turnouts and only drop rows where one or more of the three parties didn't have a candidate.
-
-
-```{r}
-names(simp_dat)
-```
-
-
-```{r}
-counts_with_miss <- simp_dat |>
-  drop_na(Ref:Con)
-```
-
-
-```{r}
-plot_pattern(counts_with_miss, rotate = TRUE)
-```
-
-
-Impute 50 times with default settings.
-
-```{r}
-set.seed(412121)
-imp <- mice(counts_with_miss, m = 50, printFlag = FALSE)
-```
-
-
-Fit one of the models to each imputed dataset.
-
-```{r}
-mods <- with(imp, colm(cbind(Con, Lab, Ref) ~ turnout_percentage, ref = 1))
-```
-
-
-```{r}
-get_params <- function(mod, comp = 1, pred) {
-  the_coefs <- summary(mod)$Coefficients[[comp]]
-  res <- the_coefs[pred, ]
-  names(res) <- c("B", "SE")
-  res
-}
-```
-
-Quick check:
-
-```{r}
-get_params(mods$analyses[[1]], 1, "turnout_percentage")
-```
-
-```{r}
-the_coefs <- map(mods$analyses, \(m) get_params(m, 1, "turnout_percentage")) |> bind_rows()
-the_coefs$N <- nrow(counts_with_miss)
-the_coefs
-```
-
-
-The estimate:
-
-```{r}
-pooled <- pool.scalar(the_coefs$B, the_coefs$SE^2, the_coefs$N)
-res <- list(B = pooled$qbar, SE = sqrt(pooled$ubar))
-res$t <- res$B / res$SE
-res$df <- pooled$df[1]
-res$p <- as.vector(pt(abs(res$t), df = res$df, lower.tail = FALSE) * 2)
-res |> as_tibble()
-```
 
 ## Comparison with multinomial regression
 
@@ -355,8 +297,9 @@ library(nnet)
 
 
 ```{r}
-mn_mod1 <- multinom(cbind(Con, Lab, Ref) ~ turnout_percentage,
-                    Hess = TRUE, data = for_analy_counts)
+mn_mod1 <- multinom(cbind(Con, Lab, RUK) ~ turnout_percentage,
+                    Hess = TRUE,
+                    data = for_analy_counts)
 mn_mod1 |> summary()
 ```
 
@@ -366,32 +309,30 @@ Compare with colm:
 mod1_count |> short_sum()
 ```
 
-The estimates are similar. The multinomal regression SEs are much smaller, presumably because it can take advantage of the counts.
-
+The estimates are similar. The multinomial regression SEs are much smaller, presumably because it can take advantage of the counts.
 
 
 ## What effect does having a Reform candidate have on the split between Tory/Labour?
-
 
 They stood most places, so this is going to be tricky...
 
 ```{r}
 reform_ass <- simp_dat |>
   drop_na(Lab, Con, turnout_percentage) |>
-  mutate(reform_stood = 1 - is.na(Ref),
+  mutate(reform_stood = 1 - is.na(RUK),
          Lab_perc = 100 * Lab / (Lab + Con))
 ```
 
 
 ```{r}
-table1(~ Lab + Con + Ref + reform_stood + turnout_percentage, data = reform_ass)
+table1(~ Lab + Con + RUK + reform_stood + turnout_percentage, data = reform_ass)
 ```
 
 ```{r paged.print=FALSE}
 reform_ass |>
   dplyr::filter(reform_stood == 0) |>
   arrange(-Lab / (Lab + Con)) |>
-  select(-c(Ref, reform_stood))
+  select(-c(RUK, reform_stood))
 ```
 
 
@@ -413,6 +354,6 @@ reform_ass |>
   ylim(0, NA)
 ```
 
-Not enough points to have faith in this!
+Not enough data to have faith in this!
 
 
