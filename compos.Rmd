@@ -1,7 +1,7 @@
 ---
 title: Was turnout associated with the composition of Labour, Tory, and Reform votes in the 2024 UK general election?
 author: "Andi Fugard (Mastodon: @andi@sciences.social)"
-date: "19 July 2024"
+date: 20 July 2024
 output:
   html_document:
     df_print: paged
@@ -10,21 +10,19 @@ output:
   word_document: default
 ---
 
-
-This is an excuse to try out the {compos} package, by David Firth and Fiona Sammut.
-
-The original analysis used data collated and published by [Democracy Club](https://candidates.democracyclub.org.uk/data/?election_id=parl.2024-07-04&field_group=results). This analysis uses [data](https://commonslibrary.parliament.uk/research-briefings/cbp-10009/) from the House of Commons Library, published 18 July.
+This is an excuse to try out the {compos} package, by David Firth and Fiona Sammut, using [data](https://commonslibrary.parliament.uk/research-briefings/cbp-10009/) from the House of Commons Library, published 18 July.
 
 Load up some packages ({compos} isn't on CRAN yet):
 
 ```{r}
 #devtools::install_github("DavidFirth/compos")
+library(compos)
 library(conflicted)
 library(tidyverse)
-library(compos)
 library(ggmice)
 library(mice)
 library(table1)
+library(marginaleffects)
 ```
 
 
@@ -33,13 +31,13 @@ library(table1)
 Candidate-level data:
 
 ```{r}
-ge_dat <- read_csv("https://researchbriefings.files.parliament.uk/documents/CBP-10009/HoC-GE2024-results-by-candidate.csv")
+ge_dat <- read_csv("HoC-GE2024-results-by-candidate.csv")
 ```
 
 Constituency-level data, used for the turnout figures:
 
 ```{r}
-ge_turnout <- read_csv("https://researchbriefings.files.parliament.uk/documents/CBP-10009/HoC-GE2024-results-by-constituency.csv") |>
+ge_turnout <- read_csv("HoC-GE2024-results-by-constituency.csv") |>
   mutate(turnout_percentage = 100*`Valid votes`/Electorate) |>
   select(`Constituency name`, turnout_percentage) |>
   rename(constituency = `Constituency name`)
@@ -74,6 +72,7 @@ table1( ~ ., data = simp_dat |> dplyr::select(-constituency))
 
 
 
+Missingness:
 
 ```{r}
 plot_pattern(simp_dat, rotate = TRUE)
@@ -312,6 +311,94 @@ mod1_count |> short_sum()
 The estimates are similar. The multinomial regression SEs are much smaller, presumably because it can take advantage of the counts.
 
 
+Plot predictions:
+
+```{r}
+pred_mod <- Vectorize(function(turnout, party) {
+  pred_matrix <- predict(mn_mod1,
+                         newdat = data.frame(turnout_percentage = turnout),
+                         type = "probs") |> as.matrix()
+  
+  pred_matrix[party, ] |>
+    as.vector() * 100
+})
+```
+
+
+```{r dpi=300}
+plot_votes +
+  geom_function(
+    fun = \(x) pred_mod(x, "Lab"),
+    colour = "#d50000",
+    linewidth = 1,
+    linetype = "dashed"
+  ) +
+  geom_function(
+    fun = \(x) pred_mod(x, "Con"),
+    colour = "#0087dc",
+    linewidth = 1,
+    linetype = "dashed"
+  ) +
+  geom_function(
+    fun = \(x) pred_mod(x, "RUK"),
+    colour = "#12b6cf",
+    linewidth = 1,
+    linetype = "dashed"
+  ) +
+  labs(title = "UK general election 2024 – multinomial model predictions",
+       caption = "Percentage votes are conditional on voting Tory, Labour, or Reform.\nDashed curves are multinom model predictions; solid curves are loess.") +
+  geom_smooth(se = FALSE,
+              method = "loess",
+              formula = y ~ x)
+```
+
+Same issue as for the colm model that the predictions aren't sufficiently s-shaped, which is unsurprising given how similar the coefficients are.
+
+Try lobbing a third degree polynomial at it:
+
+
+```{r dpi=300}
+mn_mod_2 <- multinom(cbind(Con, Lab, RUK) ~ poly(turnout_percentage, 3),
+                     Hess = TRUE,
+                     data = for_analy_counts)
+
+pred_mod_2 <- Vectorize(function(turnout, party) {
+  pred_matrix <- predict(mn_mod_2,
+                         newdat = data.frame(turnout_percentage = turnout),
+                         type = "probs") |> as.matrix()
+  
+  pred_matrix[party, ] |>
+    as.vector() * 100
+})
+
+plot_votes +
+  geom_function(
+    fun = \(x) pred_mod_2(x, "Lab"),
+    colour = "#d50000",
+    linewidth = 1,
+    linetype = "dashed"
+  ) +
+  geom_function(
+    fun = \(x) pred_mod_2(x, "Con"),
+    colour = "#0087dc",
+    linewidth = 1,
+    linetype = "dashed"
+  ) +
+  geom_function(
+    fun = \(x) pred_mod_2(x, "RUK"),
+    colour = "#12b6cf",
+    linewidth = 1,
+    linetype = "dashed"
+  ) +
+  labs(title = "UK general election 2024 – multinomial model predictions", caption = "Percentage votes are conditional on voting Tory, Labour, or Reform.\nDashed curves are multinom model predictions; solid curves are loess.") +
+  geom_smooth(se = FALSE,
+              method = "loess",
+              formula = y ~ x)
+mn_mod_2
+```
+
+
+
 ## What effect does having a Reform candidate have on the split between Tory/Labour?
 
 They stood most places, so this is going to be tricky...
@@ -328,11 +415,14 @@ reform_ass <- simp_dat |>
 table1(~ Lab + Con + RUK + reform_stood + turnout_percentage, data = reform_ass)
 ```
 
+Where they didn't stand:
+
 ```{r paged.print=FALSE}
 reform_ass |>
   dplyr::filter(reform_stood == 0) |>
-  arrange(-Lab / (Lab + Con)) |>
-  select(-c(RUK, reform_stood))
+  arrange(-Lab_perc) |>
+  select(-c(RUK, reform_stood)) |>
+  print(n = Inf)
 ```
 
 
