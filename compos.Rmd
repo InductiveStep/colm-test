@@ -436,7 +436,7 @@ reform_ass |>
   geom_point() +
   geom_smooth(method = "loess",
               formula = "y ~ x",
-              se = TRUE) +
+              se = FALSE) +
   labs(x = "Turnout (%)",
        y = "Percentage voting Lab (versus Con)",
        colour = "Reform stood",
