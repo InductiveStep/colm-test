@@ -473,7 +473,7 @@ vote_unemp <- left_join(simp_dat,
 vote_unemp |>
   ggplot(aes(y = turnout_percentage, x = unemp_percent)) +
   geom_point() +
-  geom_smooth(formula = y ~ x, span = 2, se = FALSE) +
+  geom_smooth(method = lm, formula = y ~ log(x), se = TRUE) +
   labs(y = "Turnout (%)",
        x = "Claimant rate (%)",
        caption = "Claimant rate is the percentage of the population aged 16–64 who are claiming unemployment related benefits.",
@@ -506,9 +506,11 @@ left_join(
 
 
 ```{r}
-mn_tout_unemp <- multinom(cbind(Con, Lab, RUK) ~ turnout_percentage + unemp_percent ,
-                    Hess = TRUE,
-                    data = vote_unemp)
+mn_tout_unemp <- multinom(
+  cbind(Con, Lab, RUK) ~ turnout_percentage + log(unemp_percent) ,
+  Hess = TRUE,
+  data = vote_unemp
+)
 mn_tout_unemp |> summary()
 mn_tout_unemp |> confint()
 ```
